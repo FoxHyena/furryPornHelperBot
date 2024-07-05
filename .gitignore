@@ -4,3 +4,6 @@ test.json
 photos/
 data/
 node_modules/
+fuzzy.json
+c-test.yaml
+build.log

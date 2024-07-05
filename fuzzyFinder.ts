@@ -1,18 +1,18 @@
-require('dotenv').config();
-
 import axios from 'axios';
 import { fileFromPath } from 'formdata-node/file-from-path';
-import fs from 'fs';
-import { MongoClient } from 'mongodb';
 import {
   FURRY_SITES,
   FurrySite,
   FuzzySearchResult,
 } from './js/types/fuzzyFinderTypes';
+import { config } from 'dotenv';
+import { MongoClient } from 'mongodb';
+
+config();
 
 const FUZZYFINDER_ENDPOINT = 'https://api-next.fuzzysearch.net/v1/image';
 
-const client = new MongoClient('mongodb://localhost:27017');
+const client = new MongoClient(process.env.HELPER_BOT_MONGO_URI || '');
 const database = client.db('furryHelperBot');
 const foxbotDb = database.collection('foxbotDb');
 
