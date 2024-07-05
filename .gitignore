@@ -1,0 +1,6 @@
+dist/
+test.json
+.env
+photos/
+data/
+node_modules/

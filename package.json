@@ -1,0 +1,28 @@
+{
+  "name": "furrypornhelperbot",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "woop": "npx tsx index.ts",
+    "start": "tsc && node dist/index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "nodemon": "^3.1.4",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.16.0",
+    "typescript": "^5.5.3"
+  },
+  "dependencies": {
+    "@types/node": "^20.14.9",
+    "axios": "^1.7.2",
+    "dotenv": "^16.4.5",
+    "formdata-node": "^6.0.3",
+    "mongodb": "^6.8.0",
+    "telegraf": "^4.16.3"
+  }
+}
