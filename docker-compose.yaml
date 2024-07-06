@@ -1,8 +1,8 @@
 services:
   server:
     image: ghcr.io/foxhyena/furrypornhelperbot:latest
-    build:
-      context: .
+    # build:
+    #   context: .
     env_file: ./.env
     volumes:
       - ./photos:/usr/src/app/photos
