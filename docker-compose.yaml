@@ -6,6 +6,9 @@ services:
     env_file: ./.env
     volumes:
       - ./photos:/usr/src/app/photos
+      - /etc/ipa/ca.crt:/etc/ipa/ca.crt
+    environment:
+      - NODE_EXTRA_CA_CERTS=/etc/ipa/ca.crt
     restart: unless-stopped
 
   mongo:
