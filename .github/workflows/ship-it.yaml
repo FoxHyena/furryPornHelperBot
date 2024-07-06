@@ -1,0 +1,28 @@
+name: Ship it
+
+on:
+  workflow_run:
+    workflows: [Docker Image CI]
+    types:
+      - completed
+
+jobs:
+  build:
+  
+    runs-on: ubuntu-latest
+  
+    steps:
+    - name: Deploy to server
+      uses: appleboy/ssh-action@master
+      with:
+        host: docker1
+        username: ${{ secrets.SSH_USERNAME }}
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        proxy_host: ${{ secrets.SSH_HOST }}
+        proxy_username: ${{ secrets.SSH_USERNAME }}
+        proxy_key: ${{ secrets.SSH_PRIVATE_KEY }}
+        script: |
+          cd ~/workspace/furryPornHelperBot/
+          docker-compose pull
+          docker-compose up -d
+          
