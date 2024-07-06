@@ -23,6 +23,7 @@ jobs:
         proxy_key: ${{ secrets.SSH_PRIVATE_KEY }}
         script: |
           cd ~/workspace/furryPornHelperBot/
+          git pull origin main
           docker-compose pull
           docker-compose up -d
           
