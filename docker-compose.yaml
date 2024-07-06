@@ -6,13 +6,18 @@ services:
     env_file: ./.env
     volumes:
       - ./photos:/usr/src/app/photos
+    restart: unless-stopped
+
   mongo:
-    image: mongo
+    image: nertworkweb/mongodb-no-avx
     ports:
       - 27017:27017
     volumes:
       - ./data:/data/db
+    restart: unless-stopped
+
   mongo-express:
     image: mongo-express
     ports:
       - 8081:8081
+    restart: unless-stopped
