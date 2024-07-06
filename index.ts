@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { Markup, Telegraf, session } from 'telegraf';
+import { Markup, NarrowedContext, Telegraf } from 'telegraf';
 import { message } from 'telegraf/filters';
 import fs from 'fs';
 import { fuzzyFinder } from './fuzzyFinder';
@@ -16,11 +16,12 @@ import {
   updateE621value,
   verifyE621credentials,
 } from './js/utils/e621utils';
-import { HelperBotContext } from './js/types/botTypes';
+import { HelperBotContext, Next } from './js/types/botTypes';
 import { FURRY_SITES } from './js/types/fuzzyFinderTypes';
 import { E621KeyDoc } from './js/types/e621types';
 import { config } from 'dotenv';
 import { MongoClient } from 'mongodb';
+import { CallbackQuery, Update } from 'telegraf/typings/core/types/typegram';
 const Sentry = require('@sentry/node');
 
 config();
@@ -35,14 +36,6 @@ const database = client.db('furryHelperBot');
 
 const e621keys = database.collection('e621tokens');
 const telegramDb = database.collection('telegramDb');
-
-bot.use(session());
-
-const logToFile = async (data: any) => {
-  await fs.writeFile('./test.json', JSON.stringify(data), (err) => {
-    if (err) console.log('reh D;', err);
-  });
-};
 
 const errorReply = (validationError: E621ValidationError) => {
   let errorResponse = '';
@@ -98,35 +91,32 @@ bot.on(message('photo'), async (ctx, next) => {
   const fuzzyResults = await fuzzyFinder(2, imagePath, [FURRY_SITES.e621]);
 
   if (fuzzyResults.length === 0) {
-    await ctx.telegram.sendMessage(
+    return await ctx.telegram.sendMessage(
       ctx.message.chat.id,
       `I couldn't find it ;c`
     );
-  } else {
-    const topResult = fuzzyResults[0];
-    ctx.session = { searchResult: topResult };
-
-    console.log('Session set:', ctx.session);
-
-    const hasE621Config = await hasCompleteE621config(ctx.from.id);
-
-    const e621Button = Markup.button.callback(
-      'Add to e621 favorites',
-      `addToFavorites:${topResult.site_id_str}`
-    );
-
-    const resultKeyboard = hasE621Config
-      ? { ...Markup.inlineKeyboard([e621Button]) }
-      : {};
-
-    await ctx.telegram.sendMessage(
-      ctx.message.chat.id,
-      `Woof woof! I found it :3 ${getE621postLink(topResult.site_id_str)}`,
-      {
-        ...resultKeyboard,
-      }
-    );
   }
+
+  const topResult = fuzzyResults[0];
+
+  const hasE621Config = await hasCompleteE621config(ctx.from.id);
+
+  const e621Button = Markup.button.callback(
+    'Add to e621 favorites',
+    `addToFavorites:${topResult.site_id_str}`
+  );
+
+  const resultKeyboard = hasE621Config
+    ? { ...Markup.inlineKeyboard([e621Button]) }
+    : {};
+
+  await ctx.telegram.sendMessage(
+    ctx.message.chat.id,
+    `Woof woof! I found it :3 ${getE621postLink(topResult.site_id_str)}`,
+    {
+      ...resultKeyboard,
+    }
+  );
 
   // Delete the image
   await fs.unlink(imagePath, (err) => {
@@ -136,12 +126,20 @@ bot.on(message('photo'), async (ctx, next) => {
   return next();
 });
 
-bot.command('showSession', async (ctx, next) => {
-  await next();
-  console.log('Show Session:', ctx.session);
-});
+type FavoritesData = {
+  e621PostId: string;
+};
 
-bot.action('addToFavorites', async (ctx, next) => {
+const addToFavorites = async (
+  ctx: NarrowedContext<
+    HelperBotContext,
+    Update.CallbackQueryUpdate<CallbackQuery>
+  >,
+  next: Next,
+  data: FavoritesData
+) => {
+  console.log('New Add to favs function called w/ post id:', data.e621PostId);
+
   await next();
 
   telegramDb.insertOne({
@@ -161,13 +159,14 @@ bot.action('addToFavorites', async (ctx, next) => {
     const userE621Doc = await e621keys.findOne<E621KeyDoc>({
       userId: ctx.from.id,
     });
-    const searchResult = ctx.session?.searchResult;
 
-    console.log('Search result being favorited:', searchResult);
+    const { e621PostId } = data;
 
-    if (userE621Doc && searchResult) {
+    console.log('Search result being favorited:', e621PostId);
+
+    if (userE621Doc && e621PostId) {
       const form = new FormData();
-      form.append('post_id', searchResult.site_id_str);
+      form.append('post_id', e621PostId);
       const { e621key: apiKey, e621username: username } = userE621Doc;
 
       if (!apiKey || !username) {
@@ -202,7 +201,7 @@ bot.action('addToFavorites', async (ctx, next) => {
 
       console.log('Favs post result', postRes);
 
-      await ctx.editMessageReplyMarkup(
+      return await ctx.editMessageReplyMarkup(
         Markup.inlineKeyboard([Markup.button.callback('Added! ✅', 'favAdded')])
           .reply_markup
       );
@@ -228,23 +227,20 @@ bot.action('addToFavorites', async (ctx, next) => {
       console.error(error);
     }
   }
-});
-
-// const newAddToFavorites = async (ctx, next, data) => {};
+};
 
 bot.on('callback_query', async (ctx, next) => {
-  const callbackId = ctx.callbackQuery.id;
-
-  const addToFavorites = 'addToFavorites';
+  const addToFavoritesButtonKey = 'addToFavorites';
 
   // *pukes* I'm so sorry, Idk why the type is incomplete for callbackQuery
   const callbackFunction = (ctx.callbackQuery as any)?.data as string;
   console.log('Callback object', ctx.callbackQuery);
   console.log('Callback data:', callbackFunction);
 
-  if (callbackFunction.includes(addToFavorites)) {
+  if (callbackFunction.includes(addToFavoritesButtonKey)) {
     const [name, e621PostId] = callbackFunction.split(':');
     console.log('Favorite Adder split results', name, e621PostId);
+    return await addToFavorites(ctx, next, { e621PostId });
   }
 
   // Explicit usage
