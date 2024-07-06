@@ -1,5 +1,6 @@
 services:
   server:
+    image: ghcr.io/FoxHyena/furryPornHelperBot:latest
     build:
       context: .
     env_file: ./.env
