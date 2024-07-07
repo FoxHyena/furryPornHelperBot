@@ -9,6 +9,7 @@ import {
   E621ValidationError,
   E621_ERROR_TYPES,
   deleteE621entry,
+  getE621Post,
   getE621headers,
   getE621postLink,
   getE621value,
@@ -68,55 +69,76 @@ bot.on(message('photo'), async (ctx, next) => {
 
   const messagePhotos = ctx.message.photo;
   const fileId = messagePhotos[2].file_id;
-  const url = await ctx.telegram.getFileLink(fileId);
   const photoDir = './photos';
   const imagePath = `${photoDir}/${ctx.update.message.message_id}.jpg`;
+  const userId = ctx.from.id;
 
-  await axios({
-    url: String(url),
-    responseType: 'stream',
-  }).then(async (response) => {
-    const doesPhotoDirExist = await fs.existsSync(photoDir);
+  try {
+    const url = await ctx.telegram.getFileLink(fileId);
+    await axios({
+      url: String(url),
+      responseType: 'stream',
+    }).then(async (response) => {
+      const doesPhotoDirExist = await fs.existsSync(photoDir);
 
-    if (!doesPhotoDirExist) {
-      await fs.mkdirSync(photoDir, { recursive: true });
-      console.log('photos path made :3');
-    }
+      if (!doesPhotoDirExist) {
+        await fs.mkdirSync(photoDir, { recursive: true });
+        console.log('photos path made :3');
+      }
 
-    const writer = fs.createWriteStream(imagePath);
-    response.data.pipe(writer);
-    return finishedStream(writer);
-  });
-
-  const fuzzyResults = await fuzzyFinder(2, imagePath, [FURRY_SITES.e621]);
-
-  if (fuzzyResults.length === 0) {
-    return await ctx.telegram.sendMessage(
-      ctx.message.chat.id,
-      `I couldn't find it ;c`
+      const writer = fs.createWriteStream(imagePath);
+      response.data.pipe(writer);
+      return finishedStream(writer);
+    });
+  } catch (error) {
+    console.log('Error Fetching Telegram picture', error);
+    return await ctx.reply(
+      'Oof :c I had an issue processing that image. Please try again!'
     );
   }
 
-  const topResult = fuzzyResults[0];
+  try {
+    const fuzzyFinderResult = await fuzzyFinder(
+      2,
+      imagePath,
+      [FURRY_SITES.e621],
+      userId
+    );
 
-  const hasE621Config = await hasCompleteE621config(ctx.from.id);
+    const { results: fuzzyResults } = fuzzyFinderResult;
 
-  const e621Button = Markup.button.callback(
-    'Add to e621 favorites',
-    `addToFavorites:${topResult.site_id_str}`
-  );
-
-  const resultKeyboard = hasE621Config
-    ? { ...Markup.inlineKeyboard([e621Button]) }
-    : {};
-
-  await ctx.telegram.sendMessage(
-    ctx.message.chat.id,
-    `Woof woof! I found it :3 ${getE621postLink(topResult.site_id_str)}`,
-    {
-      ...resultKeyboard,
+    if (fuzzyResults.length === 0) {
+      return await ctx.telegram.sendMessage(
+        ctx.message.chat.id,
+        `I couldn't find it ;c`
+      );
     }
-  );
+
+    const topResult = fuzzyResults[0];
+
+    const hasE621Config = await hasCompleteE621config(ctx.from.id);
+
+    const e621Button = Markup.button.callback(
+      'Add to e621 favorites',
+      `addToFavorites:${topResult.site_id_str}`
+    );
+
+    const resultKeyboard = hasE621Config
+      ? { ...Markup.inlineKeyboard([e621Button]) }
+      : {};
+
+    await ctx.telegram.sendMessage(
+      ctx.message.chat.id,
+      `Woof woof! I found it :3 ${getE621postLink(topResult.site_id_str)}`,
+      {
+        ...resultKeyboard,
+      }
+    );
+  } catch (error) {
+    return await ctx.reply(
+      'Erf ;-; I broke while looking for that image. Please try again! If things really stop working reach out to @hyenafox ^^;'
+    );
+  }
 
   // Delete the image
   await fs.unlink(imagePath, (err) => {
@@ -228,6 +250,17 @@ const addToFavorites = async (
     }
   }
 };
+
+bot.command('getPost', async (ctx, next) => {
+  const postId = ctx.args[0];
+  const userId = ctx.from.id;
+  const e621info = await getE621value(userId);
+
+  if (!e621info?.e621username || !e621info.e621key) {
+    return next();
+  }
+  return await getE621Post(postId, e621info.e621username, e621info.e621key);
+});
 
 bot.on('callback_query', async (ctx, next) => {
   const addToFavoritesButtonKey = 'addToFavorites';
