@@ -70,6 +70,8 @@ export type E621ValidationError = keyof typeof E621_ERROR_TYPES;
 export type E621Validation = {
   isValid: boolean;
   error?: E621ValidationError;
+  e621username?: string;
+  e621key?: string;
 };
 
 export const getE621headers = (
@@ -90,6 +92,25 @@ export const getE621headers = (
   }
 
   return baseHeaders;
+};
+
+export const getE621Post = async (
+  post_id: string,
+  e621username: string,
+  e621key: string
+) => {
+  try {
+    const post = await axios.get(`https://e621.net/posts/${post_id}.json`, {
+      headers: getE621headers(e621username, e621key, 'GET'),
+    });
+
+    console.log('Post got >:3', post_id);
+    return post.data.post;
+  } catch (error) {
+    console.log('Error getting post', post_id);
+  }
+
+  return {};
 };
 
 export const verifyE621credentials = async (
@@ -114,6 +135,8 @@ export const verifyE621credentials = async (
     if (testPost.status === 200) {
       return Promise.resolve({
         isValid: true,
+        e621username,
+        e621key,
       });
     }
   } catch (error: any) {
@@ -130,4 +153,19 @@ export const verifyE621credentials = async (
   }
 
   return Promise.resolve({ isValid: false, error: E621_ERROR_TYPES.UNKNOWN });
+};
+
+export const verifyE621user = async (
+  userId?: number
+): Promise<E621Validation> => {
+  if (!userId) {
+    return Promise.resolve({
+      isValid: false,
+      error: E621_ERROR_TYPES.INCOMPLETE_INFO,
+    });
+  }
+
+  const { e621username, e621key } = (await getE621value(userId)) || {};
+
+  return await verifyE621credentials(e621username, e621key);
 };
