@@ -27,6 +27,7 @@ import { config } from 'dotenv';
 import { MongoClient } from 'mongodb';
 import { CallbackQuery, Update } from 'telegraf/typings/core/types/typegram';
 import { table } from 'table';
+import { deleteImage } from './js/utils/fsUtils';
 const Sentry = require('@sentry/node');
 
 config();
@@ -41,6 +42,7 @@ const database = client.db('furryHelperBot');
 
 const e621keys = database.collection('e621tokens');
 const telegramDb = database.collection('telegramDb');
+const userErrorsDb = database.collection('userErrors');
 
 const errorReply = (validationError: E621ValidationError) => {
   let errorResponse = '';
@@ -96,9 +98,12 @@ bot.on(message('photo'), async (ctx, next) => {
     });
   } catch (error) {
     console.log('Error Fetching Telegram picture', error);
-    return await ctx.reply(
-      'Oof :c I had an issue processing that image. Please try again!'
+    await ctx.reply(
+      'Oof :c I had an issue processing that image. Please try again!',
+      { reply_parameters: { message_id: ctx.message.message_id } }
     );
+
+    return await deleteImage(imagePath);
   }
 
   try {
@@ -112,10 +117,13 @@ bot.on(message('photo'), async (ctx, next) => {
     const { results: fuzzyResults } = fuzzyFinderResult;
 
     if (fuzzyResults.length === 0) {
-      return await ctx.telegram.sendMessage(
+      await ctx.telegram.sendMessage(
         ctx.message.chat.id,
-        `I couldn't find it ;c`
+        `I couldn't find it ;c`,
+        { reply_parameters: { message_id: ctx.message.message_id } }
       );
+
+      return await deleteImage(imagePath);
     }
 
     const topResult = fuzzyResults[0];
@@ -136,20 +144,48 @@ bot.on(message('photo'), async (ctx, next) => {
       `Woof woof! I found it :3 ${getE621postLink(topResult.site_id_str)}`,
       {
         ...resultKeyboard,
+        reply_parameters: { message_id: ctx.message.message_id },
       }
     );
   } catch (error) {
-    return await ctx.reply(
-      'Erf ;-; I broke while looking for that image. Please try again! If things really stop working reach out to @hyenafox ^^;'
+    await ctx.reply(
+      'Erf ;-; I broke while looking for that image. Please try again! If things really stop working submit an error with /submitError [description]',
+      { reply_parameters: { message_id: ctx.message.message_id } }
     );
   }
 
   // Delete the image
-  await fs.unlink(imagePath, (err) => {
-    if (err) console.error('Error unlinking file', err);
-  });
+  await deleteImage(imagePath);
 
   return next();
+});
+
+bot.command('submiterror', async (ctx, next) => {
+  const errorDoc = {
+    reporterName: ctx.from.first_name,
+    reporter: ctx.from.username,
+    reporterId: ctx.from.id,
+    description: ctx.payload,
+  };
+
+  userErrorsDb.insertOne(errorDoc);
+
+  try {
+    await ctx.telegram.sendMessage(
+      process.env.HELPER_BOT_ADMIN_CHAT_ID || '',
+      `Bark! New error submitted by ${errorDoc.reporterName} ${
+        errorDoc.reporter ? `(@${errorDoc.reporter})` : ''
+      }`
+    );
+
+    await ctx.reply('Error submitted. Thank you! :3');
+    console.log('User error submitted', errorDoc);
+  } catch (error) {
+    console.log('Error submitting user error', error);
+  }
+
+  // ctx.telegram.sendMessage('83793165', 'Awoo');
+  return await next();
 });
 
 type FavoritesData = {
@@ -356,7 +392,7 @@ bot.command('sete621key', async (ctx, next) => {
 
   if (e621key && !e621username) {
     await ctx.reply(
-      "API Key set, but I'm unable to verify it as there is no username set :/ Please set it with /sete621username."
+      "API Key set, but I'm unable to verify it as there is no username set :o Please set it with /sete621username."
     );
 
     return next();
