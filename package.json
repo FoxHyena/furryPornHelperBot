@@ -26,6 +26,7 @@
     "dotenv": "^16.4.5",
     "formdata-node": "^6.0.3",
     "mongodb": "^6.8.0",
+    "table": "^6.8.2",
     "telegraf": "^4.16.3",
     "typescript": "^5.5.3"
   }

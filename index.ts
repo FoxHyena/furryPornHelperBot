@@ -8,6 +8,8 @@ import { promisify } from 'util';
 import {
   E621ValidationError,
   E621_ERROR_TYPES,
+  E621_FAVORITES_ENDPOINT,
+  analyzeE621favs,
   deleteE621entry,
   getE621Post,
   getE621headers,
@@ -16,6 +18,7 @@ import {
   hasCompleteE621config,
   updateE621value,
   verifyE621credentials,
+  verifyE621user,
 } from './js/utils/e621utils';
 import { HelperBotContext, Next } from './js/types/botTypes';
 import { FURRY_SITES } from './js/types/fuzzyFinderTypes';
@@ -23,6 +26,7 @@ import { E621KeyDoc } from './js/types/e621types';
 import { config } from 'dotenv';
 import { MongoClient } from 'mongodb';
 import { CallbackQuery, Update } from 'telegraf/typings/core/types/typegram';
+import { table } from 'table';
 const Sentry = require('@sentry/node');
 
 config();
@@ -213,13 +217,9 @@ const addToFavorites = async (
         return;
       }
 
-      const postRes = await axios.post(
-        `https://e621.net/favorites.json`,
-        form,
-        {
-          headers: getE621headers(username, apiKey, 'POST'),
-        }
-      );
+      const postRes = await axios.post(E621_FAVORITES_ENDPOINT, form, {
+        headers: getE621headers(username, apiKey, 'POST'),
+      });
 
       console.log('Favs post result', postRes);
 
@@ -260,6 +260,65 @@ bot.command('getPost', async (ctx, next) => {
     return next();
   }
   return await getE621Post(postId, e621info.e621username, e621info.e621key);
+});
+
+bot.command('analyzee621favs', async (ctx, next) => {
+  const userId = ctx.from.id;
+  const userArgs = ctx.args || [];
+  const DEFAULT_LENGTH = 10;
+
+  const displayLength =
+    userArgs.length > 0 ? Math.round(Number(userArgs[0])) : DEFAULT_LENGTH;
+
+  if (Number.isNaN(displayLength)) {
+    return await ctx.reply(
+      "Bark\\! Sorry, that's not the correct syntax\\. The correct syntax here is the command followed by the result length and tags you'd like filtered from the results: /analyzee621favs \\[list length\\] \\[filter tags\\]\n\nThe following example returns your top 10 e621 tags, not including the following tags: anthro, dialogue:\n\n`/analyzee621favs 10 anthro dialogue`",
+      {
+        parse_mode: 'MarkdownV2',
+      }
+    );
+  }
+
+  const filterTags = userArgs.slice(1);
+
+  console.log({ displayLength, filterTags });
+
+  try {
+    const userInfo = await verifyE621user(userId);
+
+    const { e621username, e621key, isValid, error } = userInfo;
+
+    if (!isValid && error) {
+      return await ctx.reply(errorReply(error));
+    }
+
+    if (!e621username || !e621key) {
+      return await next();
+    }
+
+    const topTags = await analyzeE621favs(e621username, e621key, filterTags);
+    const topNResults: [string, number | string][] = topTags.slice(
+      0,
+      displayLength
+    );
+
+    topNResults.unshift(['Tag', 'Count']);
+
+    const tableifiedResults =
+      '```\n' +
+      table(topNResults, {
+        columns: [{ alignment: 'center' }, { alignment: 'center' }],
+      }) +
+      '```';
+    console.log(tableifiedResults);
+
+    return await ctx.reply(
+      `Here are your ✨ Top ${displayLength} ✨ e621 tags:\n\n${tableifiedResults}`,
+      { parse_mode: 'MarkdownV2' }
+    );
+  } catch (error) {
+    console.log('Error analyzing e621 favorites', error);
+  }
 });
 
 bot.on('callback_query', async (ctx, next) => {
