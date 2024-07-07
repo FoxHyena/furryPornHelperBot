@@ -8,6 +8,7 @@ const client = new MongoClient(process.env.HELPER_BOT_MONGO_URI || '');
 const database = client.db('furryHelperBot');
 const e621keys = database.collection('e621tokens');
 
+export const E621_FAVORITES_ENDPOINT = 'https://e621.net/favorites.json';
 const E621_POSTS_ENDPOINT = 'https://e621.net/posts.json';
 
 export const updateE621value = async (
@@ -57,7 +58,47 @@ export const hasCompleteE621config = async (userId: number) => {
 export const getE621postLink = (postId: string) =>
   `https://e621.net/posts/${postId}`;
 
-export const analyzeE621favs = (e621posts: any[]) => {};
+export const analyzeE621favs = async (
+  e621username: string,
+  e621key: string,
+  filterTags: string[] = []
+) => {
+  try {
+    const favoritesResult = await axios.get(E621_FAVORITES_ENDPOINT, {
+      headers: getE621headers(e621username, e621key, 'GET'),
+    });
+
+    console.log('Got faves?', !!favoritesResult);
+
+    const {
+      data: { posts: userFavorites },
+    }: {
+      data: {
+        posts: any[];
+      };
+    } = favoritesResult;
+
+    const tagMap = new Map<string, number>();
+
+    userFavorites.forEach((post) => {
+      const e621GeneralTags: string[] = post?.tags?.general;
+
+      e621GeneralTags.forEach((tag) => {
+        if (!filterTags.includes(tag)) {
+          let tagCount = (tagMap.get(tag) || 0) + 1;
+          tagMap.set(tag, tagCount++);
+        }
+      });
+    });
+
+    const tagArray = [...tagMap.entries()].sort((a, b) => b[1] - a[1]);
+
+    return tagArray;
+  } catch (error) {
+    console.log('Error fetching user favorites', error);
+    return Promise.reject(new Error('analyzee621favsError'));
+  }
+};
 
 export const E621_ERROR_TYPES = {
   INCOMPLETE_INFO: 'INCOMPLETE_INFO',
