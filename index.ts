@@ -149,7 +149,7 @@ bot.on(message('photo'), async (ctx, next) => {
     );
   } catch (error) {
     await ctx.reply(
-      'Erf ;-; I broke while looking for that image. Please try again! If things really stop working submit an error with /submitError [description]',
+      'Erf ;-; I broke while looking for that image. Please try again! If things really stop working submit an error with /submiterror [description]',
       { reply_parameters: { message_id: ctx.message.message_id } }
     );
   }
