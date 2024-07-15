@@ -55,14 +55,23 @@ export const fuzzyFinder = async (
       },
     });
 
-    let siteSpecificResults: FuzzySearchResult[] = results.data
+    let siteSpecificResults: FuzzySearchResult[] = (
+      results.data as FuzzySearchResult[]
+    )
       .filter((searchResult: FuzzySearchResult) =>
         searchSites.includes(searchResult.site)
       )
-      .sort(
-        (a: FuzzySearchResult, b: FuzzySearchResult) =>
-          a.distance && b.distance && a.distance - b.distance
-      );
+      .sort((a: FuzzySearchResult, b: FuzzySearchResult) => {
+        if (a.distance === undefined && b.distance === undefined) {
+          return 0;
+        } else if (a.distance === undefined) {
+          return 1;
+        } else if (b.distance === undefined) {
+          return -1;
+        }
+
+        return a.distance - b.distance;
+      });
 
     const e621creds = await verifyE621user(userId);
     const { e621username, e621key } = e621creds;
