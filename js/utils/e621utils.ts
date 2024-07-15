@@ -122,7 +122,7 @@ export const getE621headers = (
 ) => {
   const baseHeaders = {
     Authorization: 'Basic ' + btoa(`${e621username}:${e621key}`),
-    'User-Agent': 'Furry Porn Helper Bot (made by stinkyhyena on e621)',
+    'User-Agent': `Furry Porn Helper Bot, bot made by e621 user ${process.env.HELPER_BOT_ADMIN_E621}, current API key owner: ${e621username}`,
   };
 
   if (requestType === 'POST') {

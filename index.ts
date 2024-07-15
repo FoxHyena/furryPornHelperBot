@@ -6,7 +6,6 @@ import { fuzzyFinder } from './fuzzyFinder';
 import { finished } from 'stream';
 import { promisify } from 'util';
 import {
-  E621ValidationError,
   E621_ERROR_TYPES,
   E621_FAVORITES_ENDPOINT,
   analyzeE621favs,
@@ -28,6 +27,7 @@ import { MongoClient } from 'mongodb';
 import { CallbackQuery, Update } from 'telegraf/typings/core/types/typegram';
 import { table } from 'table';
 import { deleteImage } from './js/utils/fsUtils';
+import { errorReply } from './js/utils/botUtils';
 const Sentry = require('@sentry/node');
 
 config();
@@ -43,28 +43,6 @@ const database = client.db('furryHelperBot');
 const e621keys = database.collection('e621tokens');
 const telegramDb = database.collection('telegramDb');
 const userErrorsDb = database.collection('userErrors');
-
-const errorReply = (validationError: E621ValidationError) => {
-  let errorResponse = '';
-
-  switch (validationError) {
-    case 'INCOMPLETE_INFO':
-      errorResponse =
-        'Your info is incomplete! Please finish setting it up n try again :3';
-      break;
-    case 'INVALID_INFO':
-      errorResponse =
-        'Your info is bunk ;c please check its accuracy and try again.';
-      break;
-    case 'UNKNOWN':
-    default:
-      errorResponse =
-        "Something isn't right :o I dunno what's wrong but check all your stuff n try again!";
-      break;
-  }
-
-  return errorResponse;
-};
 
 bot.on(message('photo'), async (ctx, next) => {
   telegramDb.insertOne({
@@ -134,6 +112,13 @@ bot.on(message('photo'), async (ctx, next) => {
       'Add to e621 favorites',
       `addToFavorites:${topResult.site_id_str}`
     );
+    const fileLink = topResult.url && `[File](${topResult.url})`;
+
+    const post = `[Post](${getE621postLink(topResult.site_id_str)})`;
+
+    const responseLinks = [fileLink, post]
+      .filter((linkedText) => !!linkedText)
+      .join(' - ');
 
     const resultKeyboard = hasE621Config
       ? { ...Markup.inlineKeyboard([e621Button]) }
@@ -141,10 +126,11 @@ bot.on(message('photo'), async (ctx, next) => {
 
     await ctx.telegram.sendMessage(
       ctx.message.chat.id,
-      `Woof woof! I found it :3 ${getE621postLink(topResult.site_id_str)}`,
+      `Woof woof! I found it :3 (${responseLinks})`,
       {
         ...resultKeyboard,
         reply_parameters: { message_id: ctx.message.message_id },
+        parse_mode: 'Markdown',
       }
     );
   } catch (error) {
@@ -184,7 +170,6 @@ bot.command('submiterror', async (ctx, next) => {
     console.log('Error submitting user error', error);
   }
 
-  // ctx.telegram.sendMessage('83793165', 'Awoo');
   return await next();
 });
 
