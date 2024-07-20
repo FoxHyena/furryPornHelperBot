@@ -63,15 +63,13 @@ export const findPhoto = async (
   replyMessage?: ReplyMessage
 ) => {
   const messagePhotos = useAltPhoto ? photo : ctx.message.photo;
-  console.log('messagephots', messagePhotos);
+  console.log('messagephotos', messagePhotos);
 
   const fileId = messagePhotos[2].file_id;
   const photoDir = './photos';
   const imagePath = `${photoDir}/${ctx.update.message.message_id}.jpg`;
   const userId = ctx.from.id;
   const curMessage = useAltPhoto ? replyMessage : ctx.message;
-  console.log('AAAAAAAAAAAAA', curMessage);
-
   const messageReplyId = curMessage?.message_id;
   const reply_parameters = messageReplyId
     ? ({ message_id: messageReplyId } as ReplyParameters)
