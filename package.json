@@ -8,7 +8,7 @@
     "start": "tsc && node dist/index.js",
     "build": "npx tsc --build",
     "clean": "npx tsc --build --clean",
-    "nodemon-start": "npx nodemon index.ts --ignore ./fuzzy.json --ignore ./test.json --ignore ./data",
+    "n-s": "npx nodemon index.ts --ignore ./fuzzy.json --ignore ./test.json --ignore ./data",
     "docker-start": "node dist/index.js"
   },
   "keywords": [],

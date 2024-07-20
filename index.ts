@@ -1,10 +1,6 @@
 import axios from 'axios';
 import { Markup, NarrowedContext, Telegraf } from 'telegraf';
 import { message } from 'telegraf/filters';
-import fs from 'fs';
-import { fuzzyFinder } from './fuzzyFinder';
-import { finished } from 'stream';
-import { promisify } from 'util';
 import {
   E621_ERROR_TYPES,
   E621_FAVORITES_ENDPOINT,
@@ -12,29 +8,29 @@ import {
   deleteE621entry,
   getE621Post,
   getE621headers,
-  getE621postLink,
   getE621value,
-  hasCompleteE621config,
   updateE621value,
   verifyE621credentials,
   verifyE621user,
 } from './js/utils/e621utils';
 import { HelperBotContext, Next } from './js/types/botTypes';
-import { FURRY_SITES } from './js/types/fuzzyFinderTypes';
 import { E621KeyDoc } from './js/types/e621types';
 import { config } from 'dotenv';
 import { MongoClient } from 'mongodb';
-import { CallbackQuery, Update } from 'telegraf/typings/core/types/typegram';
+import {
+  CallbackQuery,
+  Update,
+  Message,
+  PhotoSize,
+} from 'telegraf/typings/core/types/typegram';
 import { table } from 'table';
-import { deleteImage } from './js/utils/fsUtils';
-import { errorReply } from './js/utils/botUtils';
+import { errorReply, findPhoto } from './js/utils/botUtils';
+
 const Sentry = require('@sentry/node');
 
 config();
 
 Sentry.init({ dsn: process.env.HELPER_BOT_SENTRY_DSN });
-
-const finishedStream = promisify(finished);
 
 const bot = new Telegraf<HelperBotContext>(process.env.BOT_TOKEN || '');
 const client = new MongoClient(process.env.HELPER_BOT_MONGO_URI || '');
@@ -49,99 +45,33 @@ bot.on(message('photo'), async (ctx, next) => {
     chat: ctx.chat,
     message: ctx.message,
     time: new Date().toString(),
+    type: 'PhotoMessage',
   });
 
-  const messagePhotos = ctx.message.photo;
-  const fileId = messagePhotos[2].file_id;
-  const photoDir = './photos';
-  const imagePath = `${photoDir}/${ctx.update.message.message_id}.jpg`;
-  const userId = ctx.from.id;
+  await findPhoto(ctx, next);
 
-  try {
-    const url = await ctx.telegram.getFileLink(fileId);
-    await axios({
-      url: String(url),
-      responseType: 'stream',
-    }).then(async (response) => {
-      const doesPhotoDirExist = await fs.existsSync(photoDir);
+  return next();
+});
 
-      if (!doesPhotoDirExist) {
-        await fs.mkdirSync(photoDir, { recursive: true });
-        console.log('photos path made :3');
-      }
+bot.command('retry', async (ctx, next) => {
+  //Another unforgivable type transgression I'm so sorry. 2 horny 2 type uwu
+  const replyMessage = ctx.message.reply_to_message as any;
 
-      const writer = fs.createWriteStream(imagePath);
-      response.data.pipe(writer);
-      return finishedStream(writer);
-    });
-  } catch (error) {
-    console.log('Error Fetching Telegram picture', error);
-    await ctx.reply(
-      'Oof :c I had an issue processing that image. Please try again!',
-      { reply_parameters: { message_id: ctx.message.message_id } }
-    );
-
-    return await deleteImage(imagePath);
-  }
-
-  try {
-    const fuzzyFinderResult = await fuzzyFinder(
-      2,
-      imagePath,
-      [FURRY_SITES.e621],
-      userId
-    );
-
-    const { results: fuzzyResults } = fuzzyFinderResult;
-
-    if (fuzzyResults.length === 0) {
-      await ctx.telegram.sendMessage(
-        ctx.message.chat.id,
-        `I couldn't find it ;c`,
-        { reply_parameters: { message_id: ctx.message.message_id } }
-      );
-
-      return await deleteImage(imagePath);
-    }
-
-    const topResult = fuzzyResults[0];
-
-    const hasE621Config = await hasCompleteE621config(ctx.from.id);
-
-    const e621Button = Markup.button.callback(
-      'Add to e621 favorites',
-      `addToFavorites:${topResult.site_id_str}`
-    );
-    const fileLink = topResult.url && `[File](${topResult.url})`;
-
-    const post = `[Post](${getE621postLink(topResult.site_id_str)})`;
-
-    const responseLinks = [fileLink, post]
-      .filter((linkedText) => !!linkedText)
-      .join(' - ');
-
-    const resultKeyboard = hasE621Config
-      ? { ...Markup.inlineKeyboard([e621Button]) }
-      : {};
-
-    await ctx.telegram.sendMessage(
-      ctx.message.chat.id,
-      `Woof woof! I found it :3 (${responseLinks})`,
-      {
-        ...resultKeyboard,
-        reply_parameters: { message_id: ctx.message.message_id },
-        parse_mode: 'Markdown',
-      }
-    );
-  } catch (error) {
-    await ctx.reply(
-      'Erf ;-; I broke while looking for that image. Please try again! If things really stop working submit an error with /submiterror [description]',
-      { reply_parameters: { message_id: ctx.message.message_id } }
+  if (!replyMessage || !replyMessage?.photo) {
+    return await ctx.reply(
+      "Try replying to a message that has a pic in it 'n' try again perv ;3"
     );
   }
 
-  // Delete the image
-  await deleteImage(imagePath);
+  telegramDb.insertOne({
+    chat: ctx.chat,
+    message: ctx.message,
+    time: new Date().toString(),
+    type: 'PhotoMessageRetry',
+    repliedtoMessage: ctx.message.reply_to_message,
+  });
+
+  await findPhoto(ctx as any, next, true, replyMessage.photo, replyMessage);
 
   return next();
 });
@@ -183,7 +113,8 @@ const addToFavorites = async (
     Update.CallbackQueryUpdate<CallbackQuery>
   >,
   next: Next,
-  data: FavoritesData
+  data: FavoritesData,
+  callbackFunction: string = ''
 ) => {
   console.log('New Add to favs function called w/ post id:', data.e621PostId);
 
@@ -221,7 +152,7 @@ const addToFavorites = async (
           Markup.inlineKeyboard([
             Markup.button.callback(
               "Can't add :/ Incomplete e621 info",
-              'favAdded'
+              callbackFunction
             ),
           ]).reply_markup
         );
@@ -263,7 +194,7 @@ const addToFavorites = async (
         Markup.inlineKeyboard([
           Markup.button.callback(
             'Something went wrong :/ make sure your info is set up correctly',
-            'favAdded'
+            callbackFunction
           ),
         ]).reply_markup
       );
@@ -353,7 +284,7 @@ bot.on('callback_query', async (ctx, next) => {
   if (callbackFunction.includes(addToFavoritesButtonKey)) {
     const [name, e621PostId] = callbackFunction.split(':');
     console.log('Favorite Adder split results', name, e621PostId);
-    return await addToFavorites(ctx, next, { e621PostId });
+    return await addToFavorites(ctx, next, { e621PostId }, callbackFunction);
   }
 
   // Explicit usage
