@@ -68,7 +68,7 @@ bot.command('retry', async (ctx, next) => {
     message: ctx.message,
     time: new Date().toString(),
     type: 'PhotoMessageRetry',
-    repliedtoMessage: ctx.message.reply_to_message,
+    repliedtoMessage: replyMessage,
   });
 
   await findPhoto(ctx as any, next, true, replyMessage.photo, replyMessage);
